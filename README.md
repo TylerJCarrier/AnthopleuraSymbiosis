@@ -1,6 +1,7 @@
 These files pertain to...
 
 Project title: Symbiont-mediated metabolic shift in the sea anemone Anthopleura elegantissima
+
 Project authors: Tyler J. Carrier, Holland Elder, Jason Macrander, James L. Dimond, Brian L. Bingham, & Adam M. Reitzel
 
 
