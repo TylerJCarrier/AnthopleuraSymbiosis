@@ -7,7 +7,7 @@ Project authors: Tyler J. Carrier, Holland Elder, Jason Macrander, James L. Dimo
 
 There are two files...
 1. "Carrier_etal_Transcriptome.txt" -- this for transcriptome-related data
-2. "Carrier_etal_Metabolome.txt -- this for metabolome-related data
+2. "Carrier_etal_Microbiome.txt" -- this for metabolome-related data
 
 Any questions should be directed to:
 1. Tyler Carrier (Me): tcarrie1@charlotte.edu
