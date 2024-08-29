@@ -1,0 +1,375 @@
+#Project title: Symbiont-mediated metabolic shift in the sea anemone Anthopleura elegantissima
+#Project authors: Tyler J. Carrier, Holland Elder, Jason Macrander, James L. Dimond, Brian L. Bingham, & Adam M. Reitzel
+
+#What: Amplicon pipeline for comparing bacterial communities associated with Anthopleura in different symbiosis states.
+#Type: MiSeq 
+
+
+
+
+### BUILD ENVIRONMENT AND INSTALL ###
+module load anaconda3/2020.11
+
+wget https://data.qiime2.org/distro/core/qiime2-2022.11-py38-linux-conda.yml
+conda env create -n qiime2-2022.11 --file qiime2-2022.11-py38-linux-conda.yml
+rm qiime2-2022.11-py38-linux-conda.yml
+conda activate qiime2-2022.11
+
+
+### IMPORT RAW FILES INTO QIIME2 ###
+qiime tools import \
+ --type 'SampleData[PairedEndSequencesWithQuality]' \
+ --input-path /home/AnthopleuraSymbiosis_Microbiome/rawreads_16S \
+ --input-format CasavaOneEightSingleLanePerSampleDirFmt \
+ --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import.qza
+
+
+### TRIM PRIMERS OFF READS #
+qiime cutadapt trim-paired \
+ --i-demultiplexed-sequences /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import.qza \
+ --p-front-f CCTACGGGNGGCWGCAG \
+ --p-front-r GACTACHVGGGTATCTAATCC \
+ --p-error-rate 0 \
+ --o-trimmed-sequences /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim.qza
+
+
+### JOIN/MERGE PAIRED-ENDS ###
+qiime vsearch merge-pairs \
+ --i-demultiplexed-seqs /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim.qza \
+ --o-merged-sequences /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired.qza \
+ --p-minovlen 20 \
+ --p-maxdiffs 10 \
+ --p-minmergelen 350 \
+ --p-maxmergelen 550 \
+ --p-allowmergestagger \
+ --p-truncqual 10 \
+ --p-minlen 100
+
+
+### QUALITY CONTROL PAIRED-END BASED ON PHRED Q SCORES ###
+qiime quality-filter q-score \
+ --i-demux /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired.qza \
+ --o-filtered-sequences /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25.qza \
+ --o-filter-stats /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_stats.qza \
+ --p-quality-window 5 \
+ --p-min-quality 25 
+
+
+### REIMPORT FILTERED FILES WITH MODIFIED NAMES ###
+qiime tools export \
+ --input-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25.qza \
+ --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25
+
+cp -r /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25 /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames
+
+qiime tools import \
+ --type 'SampleData[SequencesWithQuality]' \
+ --input-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/MANIFEST.txt \
+ --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames.qza \
+ --input-format SingleEndFastqManifestPhred33
+
+
+### DENOISE PROCESSED READS ###
+qiime deblur denoise-16S \
+ --i-demultiplexed-seqs /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames.qza \
+ --p-trim-length 400 \
+ --o-representative-sequences /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq.qza \
+ --o-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table.qza \
+ --p-sample-stats \
+ --o-stats /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_stats.qza
+
+
+### PHYLOGENY OF ALL SEQUENCES ###
+qiime alignment mafft \
+ --i-sequences /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq.qza \
+ --o-alignment /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq_aligned.qza
+
+qiime alignment mask \
+ --i-alignment /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq_aligned.qza \
+ --o-masked-alignment /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq_aligned_mask.qza
+
+qiime phylogeny fasttree \
+ --i-alignment /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq_aligned_mask.qza \
+ --o-tree /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq_aligned_mask_tree.qza
+
+qiime phylogeny midpoint-root \
+ --i-tree /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq_aligned_mask_tree.qza \
+ --o-rooted-tree /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq_aligned_mask_tree_rooted.qza
+
+
+### PROCESS FOR ALL TAXA ###
+qiime feature-classifier classify-sklearn \
+--i-classifier /DATABASES/silva_138/silva-138-99-nb-classifier.qza \
+--i-reads /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq.qza \
+--o-classification /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq_AssignTaxa.qza \
+--p-confidence disable \
+--p-read-orientation same
+
+
+### FILTER ARCHAEA, CHLOROPLAST, SINGLETONS ###
+qiime taxa filter-table \
+  --i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table.qza \
+  --i-taxonomy /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq_AssignTaxa.qza \
+  --p-exclude Archaea \
+  --p-mode contains \
+  --o-filtered-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table_NoArchaea.qza
+
+qiime taxa filter-table \
+  --i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table_NoArchaea.qza \
+  --i-taxonomy /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_RepSeq_AssignTaxa.qza \
+  --p-exclude Chloroplast \
+  --p-mode contains \
+  --o-filtered-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table_NoArchaeaNoChloroplast.qza
+
+qiime feature-table filter-features \
+  --i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table_NoArchaeaNoChloroplast.qza \
+  --p-min-frequency 2 \
+  --o-filtered-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table_NoArchaeaNoChloroplast_No1.qza
+
+
+### DETERMINE MINIMUM SAMPLE 
+qiime tools export \
+  --input-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table_NoArchaeaNoChloroplast_No1.qza \
+  --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table_NoArchaeaNoChloroplast_No1
+
+biom convert \
+-i /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table_NoArchaeaNoChloroplast_No1/feature-table.biom \
+-o /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table_NoArchaeaNoChloroplast_No1/feature-table.txt \
+--to-tsv
+
+
+### RAREIFY TABLE ###
+qiime feature-table rarefy \
+  --i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table_NoArchaeaNoChloroplast_No1.qza \
+  --p-sampling-depth 1000 \
+  --p-with-replacement \
+  --o-rarefied-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_import_trim_paired_QC25_NewNames_deblur_table_NoArchaeaNoChloroplast_No1_rare.qza
+
+
+### ALPHA RAREFACTION ###
+qiime diversity alpha-rarefaction \
+  --i-table /Anthopleura_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare.qza \
+  --p-max-depth 1000 \
+  --i-phylogeny /Anthopleura_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_TreeRooted.qza \
+  --m-metadata-file /Anthopleura_Microbiome/qiime2/AnthopleuraSymbiosis_Metadata.txt \
+  --output-dir /Anthopleura_Microbiome/qiime2/1_analyses/4_AlphaRare
+
+qiime tools export \
+  --input-path /Anthopleura_Microbiome/qiime2/1_analyses/4_AlphaRare/visualization.qzv \
+  --output-path /Anthopleura_Microbiome/qiime2/1_analyses/4_AlphaRare/AlphaRare_visualization
+
+
+### BETA DIVERSITY ###
+# unweighted
+qiime diversity beta-phylogenetic \
+  --i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare.qza \
+  --i-phylogeny /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_TreeRooted.qza \
+  --p-metric unweighted_unifrac \
+  --p-variance-adjusted \
+  --o-distance-matrix /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_unwUniFrac.qza
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_unwUniFrac.qza \
+  --m-metadata-file /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_Metadata.txt \
+  --m-metadata-column Color \
+  --p-method permanova \
+  --p-pairwise \
+  --o-visualization /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_unwUniFrac_permanoa.qzv
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_unwUniFrac.qza \
+  --m-metadata-file /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_Metadata.txt \
+  --m-metadata-column Color \
+  --p-method anosim \
+  --p-pairwise \
+  --o-visualization /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_unwUniFrac_anosim.qzv
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_unwUniFrac.qza \
+  --m-metadata-file /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_Metadata.txt \
+  --m-metadata-column Color \
+  --p-method permdisp \
+  --p-pairwise \
+  --o-visualization /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_unwUniFrac_permdisp.qzv
+
+
+# weighted
+qiime diversity beta-phylogenetic \
+  --i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare.qza \
+  --i-phylogeny /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_TreeRooted.qza \
+  --p-metric weighted_unifrac \
+  --p-variance-adjusted \
+  --o-distance-matrix /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_wUniFrac.qza
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_wUniFrac.qza \
+  --m-metadata-file /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_Metadata.txt \
+  --m-metadata-column Color \
+  --p-method permanova \
+  --p-pairwise \
+  --o-visualization /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_wUniFrac_permanoa.qzv
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_wUniFrac.qza \
+  --m-metadata-file /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_Metadata.txt \
+  --m-metadata-column Color \
+  --p-method anosim \
+  --p-pairwise \
+  --o-visualization /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_wUniFrac_anosim.qzv
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_wUniFrac.qza \
+  --m-metadata-file /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_Metadata.txt \
+  --m-metadata-column Color \
+  --p-method permdisp \
+  --p-pairwise \
+  --o-visualization /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_BetaPhyDiversity_wUniFrac_permdisp.qzv
+
+### TAXA PLOTS ###
+qiime taxa barplot \
+  --i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare.qza \
+  --i-taxonomy /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_AssignTaxa.qza \
+  --m-metadata-file /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_Metadata.txt \
+  --output-dir /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/2_TaxaPlot
+
+qiime tools export \
+  --input-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/2_TaxaPlot/visualization.qzv \
+  --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/2_TaxaPlot/visualization
+
+
+
+### ALPHA DIVERSITY ###
+#faith
+qiime diversity alpha-phylogenetic \
+  --i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare.qza \
+  --i-phylogeny /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_TreeRooted.qza \
+  --p-metric faith_pd \
+  --output-dir /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaPhylogenetic_faith_pd
+
+qiime tools export \
+  --input-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaPhylogenetic_faith_pd/alpha_diversity.qza \
+  --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaPhylogenetic_faith_pd/alpha_diversity
+
+#observed ASVs
+qiime diversity alpha \
+--i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare.qza \
+--p-metric observed_features \
+--output-dir /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_observed_otus
+
+qiime tools export \
+  --input-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_observed_otus/alpha_diversity.qza \
+  --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_observed_otus/alpha_diversity
+
+#McintoshE
+qiime diversity alpha \
+--i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare.qza \
+--p-metric mcintosh_e \
+--output-dir /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_McintoshE
+
+qiime tools export \
+  --input-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_McintoshE/alpha_diversity.qza \
+  --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_McintoshE/alpha_diversity
+
+#McintoshD
+qiime diversity alpha \
+--i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare.qza \
+--p-metric mcintosh_d \
+--output-dir /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_McintoshD
+
+qiime tools export \
+  --input-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_McintoshD/alpha_diversity.qza \
+  --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_McintoshD/alpha_diversity
+
+
+
+### Sphingomonas ###
+#filter
+qiime taxa filter-table \
+  --i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare.qza \
+  --i-taxonomy /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_AssignTaxa.qza \
+  --p-include Sphingomonas \
+  --p-mode contains \
+  --o-filtered-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare_Sphingomonas.qza
+
+qiime taxa filter-table \
+  --i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare_Sphingomonas.qza \
+  --i-taxonomy /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_AssignTaxa.qza \
+  --p-exclude Novosphingobium \
+  --p-mode exact \
+  --o-filtered-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare_OnlySphingomonas.qza
+
+#beta diversity, weighted
+qiime diversity beta-phylogenetic \
+  --i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare_OnlySphingomonas.qza \
+  --i-phylogeny /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_TreeRooted.qza \
+  --p-metric weighted_unifrac \
+  --p-variance-adjusted \
+  --o-distance-matrix /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/1_BetaDiversity/AnthopleuraSymbiosis_Sphingomonas_BetaPhyDiversity_wUniFrac.qza
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/1_BetaDiversity/AnthopleuraSymbiosis_Sphingomonas_BetaPhyDiversity_wUniFrac.qza \
+  --m-metadata-file /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_Metadata.txt \
+  --m-metadata-column Color \
+  --p-method permanova \
+  --p-pairwise \
+  --o-visualization /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/1_BetaDiversity/AnthopleuraSymbiosis_Sphingomonas_BetaPhyDiversity_wUniFrac_permanoa.qzv
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/1_BetaDiversity/AnthopleuraSymbiosis_Sphingomonas_BetaPhyDiversity_wUniFrac.qza \
+  --m-metadata-file /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_Metadata.txt \
+  --m-metadata-column Color \
+  --p-method anosim \
+  --p-pairwise \
+  --o-visualization /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/1_BetaDiversity/AnthopleuraSymbiosis_Sphingomonas_BetaPhyDiversity_wUniFrac_anosim.qzv
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/1_BetaDiversity/AnthopleuraSymbiosis_Sphingomonas_BetaPhyDiversity_wUniFrac.qza \
+  --m-metadata-file /home/AnthopleuraSymbiosis_Microbiome/qiime2/AnthopleuraSymbiosis_Metadata.txt \
+  --m-metadata-column Color \
+  --p-method permdisp \
+  --p-pairwise \
+  --o-visualization /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/1_BetaDiversity/AnthopleuraSymbiosis_Sphingomonas_BetaPhyDiversity_wUniFrac_permdisp.qzv
+
+#alpha
+#faith
+qiime diversity alpha-phylogenetic \
+  --i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare_Sphingomonas.qza \
+  --i-phylogeny /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_TreeRooted.qza \
+  --p-metric faith_pd \
+  --output-dir /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaPhylogenetic_faith_pd_Sphingomonas
+
+qiime tools export \
+  --input-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaPhylogenetic_faith_pd_Sphingomonas/alpha_diversity.qza \
+  --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaPhylogenetic_faith_pd/alpha_diversity_Sphingomonas
+
+#observed ASVs
+qiime diversity alpha \
+--i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare_Sphingomonas.qza \
+--p-metric observed_features \
+--output-dir /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_observed_otus_Sphingomonas
+
+qiime tools export \
+  --input-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_observed_otus_Sphingomonas/alpha_diversity.qza \
+  --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_observed_otus/alpha_diversity_Sphingomonas
+
+#McintoshE
+qiime diversity alpha \
+--i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare_Sphingomonas.qza \
+--p-metric mcintosh_e \
+--output-dir /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_McintoshE_Sphingomonas
+
+qiime tools export \
+  --input-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_McintoshE_Sphingomonas/alpha_diversity.qza \
+  --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_McintoshE/alpha_diversity_Sphingomonas
+
+#McintoshD
+qiime diversity alpha \
+--i-table /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/AnthopleuraSymbiosis_rare_Sphingomonas.qza \
+--p-metric mcintosh_d \
+--output-dir /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_McintoshD_Sphingomonas
+
+qiime tools export \
+  --input-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_McintoshD_Sphingomonas/alpha_diversity.qza \
+  --output-path /home/AnthopleuraSymbiosis_Microbiome/qiime2/1_analyses/3_Alpha/AnthopleuraSymbiosis_AlphaNonPhylogenetic_McintoshD/alpha_diversity_Sphingomonas
+
+
